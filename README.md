@@ -1,6 +1,3 @@
-### README.md
-
-
 # C-Cultivator
 
 C-Cultivatorは、42の学生コミュニティにおけるピア・ラーニングの促進を目的とした、学習支援用のDiscord Botです。
@@ -93,5 +90,3 @@ C-Cultivator/
 ## ライセンス (License)
 
 This project is licensed under the MIT License.
-
-```
