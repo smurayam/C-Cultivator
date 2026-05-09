@@ -1,0 +1,10 @@
+services:
+  bot:
+    build: .
+    container_name: 42_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - ./data:/app/data

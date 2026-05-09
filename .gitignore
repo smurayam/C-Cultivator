@@ -1,0 +1,21 @@
+# セキュリティ（絶対に必須）
+.env
+
+# データベース（ローカルのユーザー情報やテスト結果をPushしないため）
+data/
+*.db
+*.sqlite3
+
+# Pythonの仮想環境（ファイル数が膨大になるため）
+.venv/
+venv/
+
+# Pythonのキャッシュファイル
+__pycache__/
+*.pyc
+
+# OSの一時ファイル
+.DS_Store
+env
+.env
+env
