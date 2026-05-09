@@ -33,7 +33,7 @@ DockerおよびDocker Composeがインストールされている環境を前提
 
 ### 1. リポジトリのクローン
 ```bash
-git clone [https://github.com/YourUsername/C-Cultivator.git](https://github.com/YourUsername/C-Cultivator.git)
+git clone [https://github.com/smurayam/C-Cultivator.git](https://github.com/smurayam/C-Cultivator.git)
 cd C-Cultivator
 
 ```
