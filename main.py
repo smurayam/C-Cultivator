@@ -3,7 +3,7 @@ from discord.ext import commands, tasks
 import sqlite3
 import os
 from dotenv import load_dotenv
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 import random
 import asyncio
 import judge
@@ -28,7 +28,6 @@ def init_db():
 
     cursor.execute('''CREATE TABLE IF NOT EXISTS users (user_id TEXT PRIMARY KEY, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS tasks (task_id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, description TEXT, func_name TEXT, test_case TEXT)''')
-    # 📝 変更: channel_id 列を追加
     cursor.execute('''CREATE TABLE IF NOT EXISTS sessions (session_id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER, channel_id INTEGER, notified_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (task_id) REFERENCES tasks(task_id))''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS attempts (attempt_id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, user_id TEXT, started_at DATETIME, submitted_at DATETIME, status TEXT, norm_passed BOOLEAN, FOREIGN KEY (session_id) REFERENCES sessions(session_id), FOREIGN KEY (user_id) REFERENCES users(user_id))''')
 
@@ -90,7 +89,7 @@ async def on_ready():
 @tasks.loop(minutes=1)
 async def daily_scheduler():
     global target_time
-    now = datetime.now()
+    now = datetime.now() # DockerのTZ(Asia/Tokyo)によりJSTとして取得される
     
     if now.hour == 9 and now.minute == 0:
         h = random.randint(10, 21)
@@ -122,18 +121,15 @@ async def trigger_guerilla_event():
     # 🔐 秘密の感想戦チャンネルを作成
     # --------------------------------------------------
     guild = channel.guild
-    # カテゴリを探す（なければ作成）
     category = discord.utils.get(guild.categories, name="🔐 感想戦会場")
     if not category:
         category = await guild.create_category("🔐 感想戦会場")
 
-    # @everyone は見れない、Botだけが見れる設定でチャンネル作成
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(read_messages=False),
         guild.me: discord.PermissionOverwrite(read_messages=True)
     }
     
-    # チャンネル名には日付と課題名を入れる
     today_str = datetime.now().strftime("%m月%d日")
     secret_channel = await guild.create_text_channel(
         name=f"{today_str}-{task_title}",
@@ -141,7 +137,6 @@ async def trigger_guerilla_event():
         overwrites=overwrites
     )
     
-    # セッションを作成し、生成したチャンネルのIDも保存
     cursor.execute("INSERT INTO sessions (task_id, channel_id) VALUES (?, ?)", (task_id, secret_channel.id))
     conn.commit()
     conn.close()
@@ -159,12 +154,10 @@ async def trigger_guerilla_event():
 # --------------------------------------------------
 @bot.tree.command(name="test_alert", description="[管理者用] ゲリラ通知を今すぐテスト発射します")
 async def test_alert(interaction: discord.Interaction):
-    # ① サーバー内での実行かどうかをチェック（DMなら弾く）
     if interaction.guild is None:
         await interaction.response.send_message("❌ このコマンドはサーバーのチャンネル内で実行してください！", ephemeral=True)
         return
 
-    # ② 管理者権限があるかをチェック
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("❌ 管理者権限が必要です。", ephemeral=True)
         return
@@ -230,7 +223,6 @@ async def submit(interaction: discord.Interaction, file: discord.Attachment):
     conn = sqlite3.connect('data/42_bot.db')
     cursor = conn.cursor()
 
-    # 📝 変更: channel_id も一緒に取得する
     cursor.execute('''
         SELECT attempt_id, started_at, tasks.test_case, sessions.channel_id
         FROM attempts 
@@ -248,7 +240,9 @@ async def submit(interaction: discord.Interaction, file: discord.Attachment):
     attempt_id, started_at_str, test_case, secret_channel_id = row
 
     started_at = datetime.strptime(started_at_str, "%Y-%m-%d %H:%M:%S")
-    now = datetime.utcnow()
+    # SQLiteのCURRENT_TIMESTAMPはUTCで保存されるため、タイムゾーンをUTCに合わせて現在時刻を取得
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    
     elapsed_seconds = (now - started_at).total_seconds()
     elapsed_minutes = int(elapsed_seconds // 60)
     elapsed_sec_remainder = int(elapsed_seconds % 60)
@@ -264,8 +258,9 @@ async def submit(interaction: discord.Interaction, file: discord.Attachment):
     code_bytes = await file.read()
     user_code = code_bytes.decode('utf-8')
 
-    func_result = judge.run_c_code(user_code, test_case)
-    norm_result = judge.check_norminette(user_code)
+    # 非同期処理で実行し、Botのイベントループをブロックしないように修正
+    func_result = await asyncio.to_thread(judge.run_c_code, user_code, test_case)
+    norm_result = await asyncio.to_thread(judge.check_norminette, user_code)
 
     passed = (func_result['status'] == 'Success' and "KO" not in func_result['output'])
     norm_passed = (norm_result['status'] == 'Norm Passed')
@@ -284,17 +279,11 @@ async def submit(interaction: discord.Interaction, file: discord.Attachment):
     if passed:
         embed.add_field(name="✅ テスト結果", value="完璧に動作しました！", inline=False)
         
-        # --------------------------------------------------
-        # 🔐 クリア者を秘密の部屋へ招待
-        # --------------------------------------------------
         if secret_channel_id:
             secret_channel = bot.get_channel(secret_channel_id)
             if secret_channel:
-                # ユーザーに閲覧・書き込み権限を付与
                 await secret_channel.set_permissions(interaction.user, read_messages=True, send_messages=True)
-                # 部屋の中で歓迎メッセージ
                 await secret_channel.send(f"🎉 {interaction.user.mention} が {time_str} でクリアして合流しました！コードを共有しよう！\n{md_ticks}c\n{user_code}\n{md_ticks}")
-                # 返信Embedにチャンネルへのリンクを追加
                 embed.add_field(name="🔐 感想戦会場へご案内", value=f"{secret_channel.mention} で他の人のコードを見てみよう！", inline=False)
 
     else:
