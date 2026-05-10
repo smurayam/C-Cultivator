@@ -1,6 +1,7 @@
 import requests
 import subprocess
 import os
+import uuid
 
 # --------------------------------------------------
 # 1. Wandbox APIによるコンパイル＆実行
@@ -31,20 +32,19 @@ def run_c_code(user_code: str, test_main: str):
 # 2. Norminette判定処理
 # --------------------------------------------------
 def check_norminette(user_code: str):
-    filename = "temp_submit.c"
+    # ① UUIDを使用してプロセスごとに一意なファイル名を生成（競合回避）
+    filename = f"temp_submit_{uuid.uuid4().hex[:8]}.c"
     
-    # ① ユーザーコードを一時ファイルとして書き出す
+    # ② ユーザーコードを一時ファイルとして書き出す
     with open(filename, "w") as f:
         f.write(user_code)
     
     try:
-        # ② サブプロセスで norminette コマンドを実行
-        # capture_output=True で標準出力をPython側で受け取る
+        # ③ サブプロセスで norminette コマンドを実行
         result = subprocess.run(['norminette', filename], capture_output=True, text=True)
         output = result.stdout.strip()
         
-        # ③ Norminetteの出力結果をパースする
-        # エラーがなければ "temp_submit.c: OK!" と出力される
+        # ④ Norminetteの出力結果をパースする
         if "Error!" in output:
             return {"status": "Norm Error", "details": output}
         elif "OK!" in output:
@@ -57,7 +57,7 @@ def check_norminette(user_code: str):
     except Exception as e:
         return {"status": "System Error", "details": str(e)}
     finally:
-        # ④ 実行が終わったら必ず一時ファイルを削除する（ゴミを残さない）
+        # ⑤ 実行が終わったら必ず一時ファイルを削除する
         if os.path.exists(filename):
             os.remove(filename)
 
@@ -65,7 +65,7 @@ def check_norminette(user_code: str):
 # 動作テスト
 # ==========================================
 if __name__ == "__main__":
-    # わざとNormエラーになるコード（インデントがスペース、戻り値の括弧なしなど）
+    # わざとNormエラーになるコード
     mock_user_code = """
 char *ft_strchr(const char *s, int c) {
     while (*s) {

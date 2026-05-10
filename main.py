@@ -15,7 +15,7 @@ load_dotenv()
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 
 # ⚠️ 重要: 通知を飛ばしたいチャンネルのIDをここに貼り付けてください（整数で入力）
-ANNOUNCE_CHANNEL_ID = 1502152458091364445
+ANNOUNCE_CHANNEL_ID = 123456789012345678
 target_time = None
 
 # --------------------------------------------------

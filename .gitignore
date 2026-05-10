@@ -16,6 +16,3 @@ __pycache__/
 
 # OSの一時ファイル
 .DS_Store
-env
-.env
-env

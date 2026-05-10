@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - TZ=Asia/Tokyo
     volumes:
-      - .:/app
       - ./data:/app/data
